@@ -1,3 +1,5 @@
+local EXLUCED_FILES = { "src/lua.c", "src/luac.c" }
+
 project "Lua_Server"
 	language "C++"
 	targetname "lua5.1"
@@ -7,12 +9,14 @@ project "Lua_Server"
 		["Sources"] = "**.c",
 		["*"] = "premake5.lua"
 	}
+	excludes(EXLUCED_FILES)
 	
 	files {
 		"premake5.lua",
 		"src/**.c",
 		"src/**.h",
 	}
+	excludes(EXLUCED_FILES)
 
 	defines { "LUA_BUILD_AS_DLL" }
 
@@ -39,12 +43,14 @@ if os.target() == "windows" then
 			["Sources"] = "**.c",
 			["*"] = "premake5.lua"
 		}
+		excludes(EXLUCED_FILES)
 	
 		files {
 			"premake5.lua",
 			"src/**.c",
 			"src/**.h",
 		}
+		excludes(EXLUCED_FILES)
 	
 		defines {
 			"LUA_USE_APICHECK",

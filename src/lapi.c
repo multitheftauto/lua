@@ -49,7 +49,7 @@ const char lua_ident[] =
 static TValue *index2adr (lua_State *L, int idx) {
   if (idx > 0) {
     TValue *o = L->base + (idx - 1);
-    api_check(L, idx <= L->ci->top - L->base);
+    //api_check(L, idx <= L->ci->top - L->base);    // Not needed for safety checks as returns nil if out of bounds
     if (o >= L->top) return cast(TValue *, luaO_nilobject);
     else return o;
   }
@@ -106,6 +106,16 @@ LUA_API int lua_checkstack (lua_State *L, int size) {
   return res;
 }
 
+// MTA addition - Return stack space
+LUA_API int lua_getstackgap (lua_State *L) {
+  int res, gap1, gap2; 
+  lua_lock(L);
+  gap1 = ( (char *)L->stack_last - (char *)L->top ) / (int)sizeof(TValue);
+  gap2 = L->ci->top - L->top;
+  res = gap1 < gap2 ? gap1 : gap2;
+  lua_unlock(L);
+  return res;
+}
 
 LUA_API void lua_xmove (lua_State *from, lua_State *to, int n) {
   int i;
@@ -334,6 +344,22 @@ LUA_API lua_Integer lua_tointeger (lua_State *L, int idx) {
 }
 
 
+// MTA Specific
+LUA_API lua_Integer lua_tointegerW (lua_State *L, int idx) {
+  TValue n;
+  const TValue *o = index2adr(L, idx);
+  if (tonumber(o, &n)) {
+    lua_Integer res;
+    lua_Number num = nvalue(o);
+    num = fmod( num, 0x7fffffff );   // Wrap the number between -2,147,483,647 and 2,147,483,647
+    lua_number2integer(res, num);
+    return res;
+  }
+  else
+    return 0;
+}
+
+
 LUA_API int lua_toboolean (lua_State *L, int idx) {
   const TValue *o = index2adr(L, idx);
   return !l_isfalse(o);
@@ -523,7 +549,6 @@ LUA_API int lua_pushthread (lua_State *L) {
   lua_unlock(L);
   return (G(L)->mainthread == L);
 }
-
 
 
 /*
@@ -872,6 +897,7 @@ LUA_API int lua_load (lua_State *L, lua_Reader reader, void *data,
 }
 
 
+#ifdef WITH_STRING_DUMP
 LUA_API int lua_dump (lua_State *L, lua_Writer writer, void *data) {
   int status;
   TValue *o;
@@ -885,7 +911,11 @@ LUA_API int lua_dump (lua_State *L, lua_Writer writer, void *data) {
   lua_unlock(L);
   return status;
 }
-
+#else
+LUA_API int lua_dump (lua_State *L, lua_Writer writer, void *data) {
+    return 1;
+}
+#endif
 
 LUA_API int  lua_status (lua_State *L) {
   return L->status;
@@ -1085,3 +1115,28 @@ LUA_API const char *lua_setupvalue (lua_State *L, int funcindex, int n) {
   return name;
 }
 
+// MTA addition to validate inclusion of working apichecks
+#if defined(LUA_USE_APICHECK)
+LUA_API int luaX_is_apicheck_enabled()
+{
+    #if defined(LUA_USE_APICHECK)
+        #ifndef NDEBUG
+            return 1;
+        #endif
+    #endif
+    return 0;
+}
+#endif
+
+// MTA addition to tweak GC behaviour
+LUA_API void lua_addtotalbytes(lua_State *L, int n)
+{
+    global_State *g = G(L);
+    g->totalbytes += n;
+}
+
+// MTA addition to access expected results
+LUA_API int lua_ncallresult(lua_State *L)
+{
+    return L->nexpectedresults;
+}

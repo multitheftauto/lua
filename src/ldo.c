@@ -30,7 +30,18 @@
 #include "lvm.h"
 #include "lzio.h"
 
+// MTA Specific
+lua_PreCallHook pPreCallHook = NULL;
+void lua_registerPreCallHook ( lua_PreCallHook f )
+{
+    pPreCallHook = f;
+}
 
+lua_PostCallHook pPostCallHook = NULL;
+void lua_registerPostCallHook ( lua_PostCallHook f )
+{
+    pPostCallHook = f;
+}
 
 
 /*
@@ -306,7 +317,9 @@ int luaD_precall (lua_State *L, StkId func, int nresults) {
   }
   else {  /* if is a C function, call it */
     CallInfo *ci;
-    int n;
+    // MTA Specific
+    int allowed = 1;
+    int n = 0;
     luaD_checkstack(L, LUA_MINSTACK);  /* ensure minimum stack size */
     ci = inc_ci(L);  /* now `enter' new function */
     ci->func = restorestack(L, funcr);
@@ -317,7 +330,18 @@ int luaD_precall (lua_State *L, StkId func, int nresults) {
     if (L->hookmask & LUA_MASKCALL)
       luaD_callhook(L, LUA_HOOKCALL, -1);
     lua_unlock(L);
-    n = (*curr_func(L)->c.f)(L);  /* do the actual call */
+    // MTA Specific
+    if ( pPreCallHook )
+        allowed = pPreCallHook ( *curr_func(L)->c.f, L );
+    if ( allowed )
+    {
+        // MTA Specific: Store number of expected results for lua_ncallresult
+        L->nexpectedresults = nresults;
+        n = (*curr_func(L)->c.f)(L);  /* do the actual call */
+        // MTA Specific
+        if ( pPostCallHook )
+            pPostCallHook ( *curr_func(L)->c.f, L );
+    }
     lua_lock(L);
     if (n < 0)  /* yielding? */
       return PCRYIELD;
